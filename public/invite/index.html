@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a workspace on Task Tracker</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 32px 20px; background: #f8fafc; color: #0f172a; }
+  main { max-width: 440px; margin: 0 auto; }
+  h1 { font-size: 24px; }
+  li { margin: 10px 0; line-height: 1.45; }
+  code { background: #e2e8f0; padding: 2px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>You've been invited to a workspace</h1>
+  <p>Open the Task Tracker app on your Android phone, then:</p>
+  <ol>
+    <li>Create an account with <code id="email">the email address this invitation was sent to</code>.</li>
+    <li>Verify your email from the message we send you.</li>
+    <li>Open the <b>Invites</b> tab and tap <b>Accept</b>.</li>
+  </ol>
+  <p>If the app is installed, this link may already have opened it.</p>
+</main>
+<script>
+  // textContent, never innerHTML: the address comes from the URL.
+  var e = new URLSearchParams(location.search).get("email");
+  if (e) document.getElementById("email").textContent = e;
+</script>
+</body>
+</html>

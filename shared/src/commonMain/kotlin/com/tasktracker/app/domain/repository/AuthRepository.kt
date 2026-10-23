@@ -22,6 +22,11 @@ interface AuthRepository {
     /** Stores the device push token on the signed-in user profile; no-op when signed out. */
     suspend fun updateFcmToken(token: String): Result<Unit>
 
+    suspend fun sendPasswordReset(email: String): Result<Unit>
+
+    /** Updates the profile name and returns the refreshed user. */
+    suspend fun updateDisplayName(name: String): Result<User>
+
     suspend fun signOut()
 
     fun getCurrentUser(): User?

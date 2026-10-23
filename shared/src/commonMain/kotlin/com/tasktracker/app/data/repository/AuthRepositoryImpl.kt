@@ -10,6 +10,7 @@ import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 
 class AuthRepositoryImpl(
     private val auth: FirebaseAuth,
@@ -59,7 +60,26 @@ class AuthRepositoryImpl(
         firestore.collection("users").document(uid).update("fcmToken" to token)
     }
 
+    override suspend fun sendPasswordReset(email: String): Result<Unit> = firebaseCall {
+        auth.sendPasswordResetEmail(email.trim())
+    }
+
+    override suspend fun updateDisplayName(name: String): Result<User> = firebaseCall {
+        val user = checkNotNull(auth.currentUser) { "No signed-in user" }
+        user.updateProfile(displayName = name.trim())
+        firestore.collection("users").document(user.uid).update("displayName" to name.trim())
+        user.reload()
+        checkNotNull(auth.currentUser).toDomain()
+    }
+
     override suspend fun signOut() {
+        // Must happen while still signed in (the rules only let users write their own profile). Best effort:
+        // a failure here, e.g. offline, must not trap the user in a signed-in state.
+        auth.currentUser?.uid?.let { uid ->
+            firebaseCall { firestore.collection("users").document(uid).update("fcmToken" to null) }
+        }
+        // Also invalidate the device token, so a push still in flight to the old token goes nowhere.
+        firebaseCall { messaging.deleteToken() }
         auth.signOut()
     }
 
@@ -70,7 +90,8 @@ class AuthRepositoryImpl(
         firebaseCall { messaging.getToken() }.getOrNull()?.let { copy(fcmToken = it) } ?: this
 
     private suspend fun saveProfile(user: User) {
-        firestore.collection("users").document(user.uid).set(user)
+        val profile = UserProfile(user.uid, user.email.lowercase(), user.displayName, user.fcmToken)
+        firestore.collection("users").document(user.uid).set(profile, merge = true)
     }
 
     private fun FirebaseUser.toDomain() = User(
@@ -80,3 +101,13 @@ class AuthRepositoryImpl(
         isEmailVerified = isEmailVerified,
     )
 }
+
+/** The profile fields owned by sign-in; merged so fields like currentWorkspaceId are left untouched. */
+@Serializable
+private data class UserProfile(
+    val uid: String,
+    // Lowercase, because invitations are matched by email.
+    val email: String,
+    val displayName: String?,
+    val fcmToken: String?,
+)
