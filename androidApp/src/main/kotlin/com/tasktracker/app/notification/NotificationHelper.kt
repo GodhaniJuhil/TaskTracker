@@ -8,23 +8,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.tasktracker.app.MainActivity
+import com.tasktracker.app.R
 
 class NotificationHelper(private val context: Context) {
 
     fun createChannel() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        // A channel's importance cannot be raised after creation, so the old low-importance channel is replaced.
-        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
-        val channel = NotificationChannel(CHANNEL_ID, "Task updates", NotificationManager.IMPORTANCE_HIGH).apply {
-            enableLights(true)
-            enableVibration(true)
-            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-        }
+        // High importance gives heads-up display; it is the standard level for time-sensitive messages.
+        val channel = NotificationChannel(CHANNEL_ID, "Task updates", NotificationManager.IMPORTANCE_HIGH)
         manager.createNotificationChannel(channel)
     }
 
@@ -41,36 +36,19 @@ class NotificationHelper(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_task)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(openApp)
-            .setFullScreenIntent(openApp, true)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
-        wakeScreen()
-    }
-
-    /** Briefly lights the screen as a fallback for devices that ignore the full-screen intent. */
-    @Suppress("DEPRECATION")
-    private fun wakeScreen() {
-        val power = context.getSystemService(PowerManager::class.java) ?: return
-        if (power.isInteractive) return
-        power.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "TaskTracker:notification",
-        ).acquire(WAKE_DURATION_MS)
     }
 
     companion object {
         const val CHANNEL_ID = "task_updates_high"
-        private const val LEGACY_CHANNEL_ID = "task_updates"
-        private const val WAKE_DURATION_MS = 5_000L
     }
 }

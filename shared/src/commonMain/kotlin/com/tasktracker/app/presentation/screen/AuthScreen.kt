@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.rememberScrollState
@@ -80,6 +81,7 @@ private fun AuthContent(
         modifier = Modifier
             .fillMaxSize()
             .safeContentPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -121,7 +123,7 @@ private fun CredentialsForm(
     Spacer(Modifier.height(16.dp))
     OutlinedTextField(
         value = email,
-        onValueChange = { email = it.trim() },
+        onValueChange = { email = it },
         label = { Text("Email") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -139,7 +141,10 @@ private fun CredentialsForm(
     )
     Spacer(Modifier.height(16.dp))
     Button(
-        onClick = { if (isRegistering) onRegister(email, password) else onSignIn(email, password) },
+        onClick = {
+            val trimmedEmail = email.trim()
+            if (isRegistering) onRegister(trimmedEmail, password) else onSignIn(trimmedEmail, password)
+        },
         enabled = canSubmit,
         modifier = Modifier.fillMaxWidth(),
     ) {

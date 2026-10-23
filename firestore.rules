@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Personal profile (FCM token) and personal task list: owner only.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+
+      match /tasks/{taskId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    match /teams/{teamId} {
+      // The team id doubles as the invite code, so it can be fetched by id before joining.
+      // Listing is limited to teams the caller already belongs to (the "my team" query).
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid];
+
+      // Only memberIds may change, and only by adding or removing the caller.
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+        && (
+          request.resource.data.memberIds.toSet() ==
+            resource.data.memberIds.toSet().union([request.auth.uid].toSet())
+          ||
+          (request.auth.uid in resource.data.memberIds
+            && request.resource.data.memberIds.toSet() ==
+              resource.data.memberIds.toSet().difference([request.auth.uid].toSet()))
+        );
+
+      match /tasks/{taskId} {
+        function isMember() {
+          return signedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
+        }
+
+        allow read, delete: if isMember();
+        // updatedBy drives who is excluded from push notifications, so it must not be spoofable.
+        allow create, update: if isMember() && request.resource.data.updatedBy == request.auth.uid;
+      }
+    }
+  }
+}

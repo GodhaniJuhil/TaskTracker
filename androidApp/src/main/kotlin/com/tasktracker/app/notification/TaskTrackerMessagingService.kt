@@ -22,10 +22,9 @@ class TaskTrackerMessagingService : FirebaseMessagingService(), KoinComponent {
     }
 
     /**
-     * Foreground and data messages. With a high-priority payload (see [FcmPayloadExample]) this also
-     * runs when the app is backgrounded or killed, so the local notification is posted via the
-     * max-priority channel and wakes the screen. Notification-only messages in the background are
-     * displayed by the system on the manifest's default (high-importance) channel.
+     * Handles FCM messages (e.g. sent from the Firebase console). While the
+     * app is in the foreground this renders them; in the background the system shows the notification
+     * payload itself using the manifest's default channel and icon.
      */
     override fun onMessageReceived(message: RemoteMessage) {
         val title = message.notification?.title ?: message.data["title"] ?: "Task Tracker"

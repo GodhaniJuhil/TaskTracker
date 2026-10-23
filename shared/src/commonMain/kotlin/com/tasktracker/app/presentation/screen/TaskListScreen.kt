@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +41,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.tasktracker.app.domain.model.Task
 import com.tasktracker.app.presentation.viewmodel.AuthViewModel
 import com.tasktracker.app.presentation.viewmodel.TaskListViewModel
+import com.tasktracker.app.presentation.viewmodel.TeamViewModel
 import org.koin.compose.viewmodel.koinViewModel
 
 class TaskListScreen : Screen {
@@ -52,7 +54,9 @@ class TaskListScreen : Screen {
         val authViewModel = koinViewModel<AuthViewModel>()
         val taskState by taskViewModel.uiState.collectAsStateWithLifecycle()
         val authState by authViewModel.uiState.collectAsStateWithLifecycle()
+        val teamState by koinViewModel<TeamViewModel>().uiState.collectAsStateWithLifecycle()
 
+        var taskPendingDelete by remember { mutableStateOf<Task?>(null) }
         var showAddDialog by rememberSaveable { mutableStateOf(false) }
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -70,8 +74,11 @@ class TaskListScreen : Screen {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Tasks") },
-                    actions = { TextButton(onClick = authViewModel::signOut) { Text("Sign out") } },
+                    title = { Text(teamState.team?.name ?: "Tasks") },
+                    actions = {
+                        TextButton(onClick = { navigator.push(TeamScreen()) }) { Text("Team") }
+                        TextButton(onClick = authViewModel::signOut) { Text("Sign out") }
+                    },
                 )
             },
             floatingActionButton = {
@@ -90,10 +97,25 @@ class TaskListScreen : Screen {
                     else -> TaskList(
                         tasks = taskState.tasks,
                         onToggle = taskViewModel::toggleCompleted,
-                        onDelete = taskViewModel::deleteTask,
+                        onDelete = { taskPendingDelete = it },
                     )
                 }
             }
+        }
+
+        taskPendingDelete?.let { task ->
+            AlertDialog(
+                onDismissRequest = { taskPendingDelete = null },
+                title = { Text("Delete task?") },
+                text = { Text("\"${task.title}\" will be permanently deleted.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        taskViewModel.deleteTask(task.id)
+                        taskPendingDelete = null
+                    }) { Text("Delete") }
+                },
+                dismissButton = { TextButton(onClick = { taskPendingDelete = null }) { Text("Cancel") } },
+            )
         }
 
         if (showAddDialog) {
@@ -112,14 +134,15 @@ class TaskListScreen : Screen {
 private fun TaskList(
     tasks: List<Task>,
     onToggle: (Task) -> Unit,
-    onDelete: (String) -> Unit,
+    onDelete: (Task) -> Unit,
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        // Bottom padding clears the FAB (56dp + 16dp margin) so the last card is never covered.
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(tasks, key = { it.id }) { task ->
-            TaskItem(task, onToggle = { onToggle(task) }, onDelete = { onDelete(task.id) })
+            TaskItem(task, onToggle = { onToggle(task) }, onDelete = { onDelete(task) })
         }
     }
 }
