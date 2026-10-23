@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tasktracker.app.domain.auth.GoogleIdTokenProvider
 import com.tasktracker.app.domain.model.User
 import com.tasktracker.app.domain.repository.AuthRepository
+import com.tasktracker.app.domain.toUserMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,9 @@ data class AuthUiState(
     val user: User? = null,
     val isLoading: Boolean = false,
     val verificationEmailSent: Boolean = false,
+    val isSavingProfile: Boolean = false,
+    /** A positive confirmation, e.g. that a password reset email was sent. */
+    val message: String? = null,
     val error: String? = null,
 ) {
     val isSignedIn: Boolean get() = user != null
@@ -35,7 +39,7 @@ class AuthViewModel(
     init {
         authRepository.currentUserStream
             .onEach { user -> _uiState.update { it.copy(user = user) } }
-            .catch { e -> _uiState.update { it.copy(error = e.message) } }
+            .catch { e -> _uiState.update { it.copy(error = e.toUserMessage()) } }
             .launchIn(viewModelScope)
     }
 
@@ -67,7 +71,7 @@ class AuthViewModel(
         viewModelScope.launch {
             authRepository.sendEmailVerification().fold(
                 onSuccess = { _uiState.update { it.copy(verificationEmailSent = true, error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.toUserMessage()) } },
             )
         }
     }
@@ -77,7 +81,31 @@ class AuthViewModel(
         viewModelScope.launch {
             authRepository.refreshCurrentUser().fold(
                 onSuccess = { user -> _uiState.update { it.copy(user = user) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.toUserMessage()) } },
+            )
+        }
+    }
+
+    fun forgotPassword(email: String) {
+        val trimmed = email.trim()
+        if (trimmed.isBlank()) {
+            _uiState.update { it.copy(error = "Enter your email above, then tap Forgot password.", message = null) }
+            return
+        }
+        viewModelScope.launch {
+            authRepository.sendPasswordReset(trimmed).fold(
+                onSuccess = { _uiState.update { it.copy(message = "Password reset link sent to $trimmed", error = null) } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.toUserMessage(), message = null) } },
+            )
+        }
+    }
+
+    fun updateDisplayName(name: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingProfile = true) }
+            authRepository.updateDisplayName(name).fold(
+                onSuccess = { user -> _uiState.update { it.copy(isSavingProfile = false, user = user, message = "Profile saved") } },
+                onFailure = { e -> _uiState.update { it.copy(isSavingProfile = false, error = e.toUserMessage()) } },
             )
         }
     }
@@ -89,17 +117,17 @@ class AuthViewModel(
         }
     }
 
-    fun clearError() = _uiState.update { it.copy(error = null) }
+    fun clearError() = _uiState.update { it.copy(error = null, message = null) }
 
     private fun submit(action: suspend () -> Result<User>) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, message = null) }
             val result = action()
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     user = result.getOrNull() ?: it.user,
-                    error = result.exceptionOrNull()?.message,
+                    error = result.exceptionOrNull()?.toUserMessage(),
                 )
             }
         }
