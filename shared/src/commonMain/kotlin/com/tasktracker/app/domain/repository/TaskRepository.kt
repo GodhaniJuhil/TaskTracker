@@ -1,6 +1,7 @@
 package com.tasktracker.app.domain.repository
 
 import com.tasktracker.app.domain.model.Task
+import com.tasktracker.app.domain.model.TaskChanges
 import kotlinx.coroutines.flow.Flow
 
 interface TaskRepository {
@@ -9,7 +10,8 @@ interface TaskRepository {
 
     suspend fun addTask(task: Task): Result<Task>
 
-    suspend fun updateTask(task: Task): Result<Unit>
+    /** Writes only the fields set in [changes], so concurrent edits to other fields survive. */
+    suspend fun updateTask(taskId: String, changes: TaskChanges): Result<Unit>
 
     suspend fun deleteTask(taskId: String): Result<Unit>
 }

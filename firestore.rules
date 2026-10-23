@@ -7,47 +7,151 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Personal profile (FCM token) and personal task list: owner only.
-    match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
-
-      match /tasks/{taskId} {
-        allow read, write: if signedIn() && request.auth.uid == uid;
-      }
+    function verifiedEmail() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email != null;
     }
 
-    match /teams/{teamId} {
-      // The team id doubles as the invite code, so it can be fetched by id before joining.
-      // Listing is limited to teams the caller already belongs to (the "my team" query).
-      allow get: if signedIn();
-      allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function workspaceData(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data;
+    }
+
+    // OWNER is ownerId; everyone else is listed in roles, and a member without an entry is a MEMBER.
+    function roleIn(workspaceId) {
+      let ws = workspaceData(workspaceId);
+      return ws.ownerId == request.auth.uid ? 'OWNER' : ws.get('roles', {}).get(request.auth.uid, 'MEMBER');
+    }
+
+    // Profile (FCM token, current workspace): owner only.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /workspaces/{workspaceId} {
+      function isMember() {
+        return signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members;
+      }
+
+      // Invitation ids are "{workspaceId}_{receiverEmail}", so the pending invite can be found by id.
+      function hasPendingInvite() {
+        let invitePath = /databases/$(database)/documents/invitations/$(workspaceId + '_' + myEmail());
+        return verifiedEmail()
+          && exists(invitePath)
+          && get(invitePath).data.status == 'PENDING'
+          && get(invitePath).data.receiverEmail == myEmail();
+      }
+
+      // A missing document is readable so the client can check whether its personal workspace exists yet.
+      allow get: if signedIn() && (resource == null || request.auth.uid in resource.data.members);
+      allow list: if signedIn() && request.auth.uid in resource.data.members;
 
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.memberIds == [request.auth.uid];
+        && request.resource.data.members == [request.auth.uid];
 
-      // Only memberIds may change, and only by adding or removing the caller.
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
-        && (
-          request.resource.data.memberIds.toSet() ==
-            resource.data.memberIds.toSet().union([request.auth.uid].toSet())
-          ||
-          (request.auth.uid in resource.data.memberIds
-            && request.resource.data.memberIds.toSet() ==
-              resource.data.memberIds.toSet().difference([request.auth.uid].toSet()))
-        );
+      // A change to one of the per-member maps (roles, emails) that touches only the caller's own entry.
+      function onlyMyEntry(field) {
+        return request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
+      // Members that disappear from the list in an update (empty set when nobody was removed).
+      function removedMembers() {
+        return resource.data.members.toSet().difference(request.resource.data.members.toSet());
+      }
+
+      // Kinds of update, each limited to specific fields:
+      //  - join: add yourself to members with the role of your pending invitation, and publish your email;
+      //  - leave: remove yourself everywhere (the owner can't leave);
+      //  - roles: the owner changes other members' roles, never their own;
+      //  - rename: owner or admin changes the name;
+      //  - remove: owner or admin takes exactly one other member (never the owner) out of the workspace;
+      //  - email: a member publishes their own email if the workspace lacks it.
+      allow update: if signedIn() && (
+        (hasPendingInvite()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'roles', 'emails'])
+          && request.resource.data.members.toSet() ==
+            resource.data.members.toSet().union([request.auth.uid].toSet())
+          && onlyMyEntry('roles')
+          && onlyMyEntry('emails')
+          && request.resource.data.roles[request.auth.uid] ==
+            get(/databases/$(database)/documents/invitations/$(workspaceId + '_' + myEmail())).data.get('role', 'MEMBER'))
+        ||
+        (request.auth.uid in resource.data.members
+          && request.auth.uid != resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'roles', 'emails'])
+          && request.resource.data.members.toSet() ==
+            resource.data.members.toSet().difference([request.auth.uid].toSet())
+          && onlyMyEntry('roles')
+          && onlyMyEntry('emails'))
+        ||
+        (request.auth.uid == resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['roles'])
+          && !(resource.data.ownerId in request.resource.data.roles.keys()))
+        ||
+        (roleIn(workspaceId) in ['OWNER', 'ADMIN']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 40)
+        ||
+        (roleIn(workspaceId) in ['OWNER', 'ADMIN']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'roles', 'emails'])
+          && removedMembers().size() == 1
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0
+          && !(resource.data.ownerId in removedMembers())
+          && !(request.auth.uid in removedMembers())
+          && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).affectedKeys().hasOnly(removedMembers())
+          && request.resource.data.get('emails', {}).diff(resource.data.get('emails', {})).affectedKeys().hasOnly(removedMembers()))
+        ||
+        (request.auth.uid in resource.data.members
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emails'])
+          && onlyMyEntry('emails'))
+      );
 
       match /tasks/{taskId} {
-        function isMember() {
-          return signedIn()
-            && request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
-        }
-
-        allow read, delete: if isMember();
+        allow read: if isMember();
+        // Guests are read-only.
+        allow delete: if isMember() && roleIn(workspaceId) != 'GUEST';
         // updatedBy drives who is excluded from push notifications, so it must not be spoofable.
-        allow create, update: if isMember() && request.resource.data.updatedBy == request.auth.uid;
+        allow create, update: if isMember() && roleIn(workspaceId) != 'GUEST'
+          && request.resource.data.updatedBy == request.auth.uid;
       }
+    }
+
+    match /invitations/{inviteId} {
+      allow read: if verifiedEmail()
+        && (resource.data.receiverEmail == myEmail() || resource.data.senderEmail == myEmail());
+
+      // Owners and admins can invite (never as OWNER); re-inviting overwrites an earlier answer with a fresh PENDING one.
+      allow create, update: if verifiedEmail()
+        && request.resource.data.senderEmail == myEmail()
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.receiverEmail != myEmail()
+        && request.resource.data.get('role', 'MEMBER') in ['ADMIN', 'MEMBER', 'GUEST']
+        && inviteId == request.resource.data.workspaceId + '_' + request.resource.data.receiverEmail
+        && roleIn(request.resource.data.workspaceId) in ['OWNER', 'ADMIN'];
+
+      // The receiver answers a pending invitation; nothing else may change.
+      allow update: if verifiedEmail()
+        && resource.data.receiverEmail == myEmail()
+        && resource.data.status == 'PENDING'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['ACCEPTED', 'DECLINED'];
+    }
+
+    // Created by Cloud Functions only; users read their own feed, mark entries read and delete them.
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
   }
 }
