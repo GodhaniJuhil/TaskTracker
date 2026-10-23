@@ -45,6 +45,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
             implementation(libs.koin.android)
+            implementation(libs.androidx.activity.compose)
             implementation(libs.kotlinx.coroutines.android)
         }
         commonMain.dependencies {
