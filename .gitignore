@@ -20,3 +20,7 @@ node_modules/
 
 # Firebase config (keep out of public repo)
 google-services.json
+
+# Firebase CLI local artifacts
+.firebase/
+firebase-debug.log
