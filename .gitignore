@@ -24,3 +24,6 @@ google-services.json
 # Firebase CLI local artifacts
 .firebase/
 firebase-debug.log
+
+# Firebase iOS config (written by CI from a secret)
+GoogleService-Info.plist
