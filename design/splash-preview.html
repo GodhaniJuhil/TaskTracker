@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Tracker Splash Preview</title>
+<style>
+  :root { --bg:#0b1220; --fg:#e2e8f0; --muted:#94a3b8; }
+  body.light { --bg:#e2e8f0; --fg:#0f172a; --muted:#475569; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; transition:background .3s; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:var(--muted); font-size:14px; }
+  .toolbar { display:flex; gap:8px; margin-bottom:28px; flex-wrap:wrap; }
+  button { background:#2563eb; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; }
+  button.alt { background:transparent; color:var(--fg); border:1px solid var(--muted); }
+  .grid { display:flex; gap:48px; flex-wrap:wrap; align-items:flex-start; }
+  h2 { font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 14px; }
+
+  /* Phone + splash */
+  .phone { width:300px; height:620px; border-radius:44px; border:3px solid #1e293b; position:relative; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.35); }
+  .phone::before { content:""; position:absolute; top:0; left:50%; width:100px; height:22px; transform:translateX(-50%); background:#0b1220; border-radius:0 0 14px 14px; z-index:3; }
+  .splash { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:linear-gradient(180deg,#0f172a 0%,#1e3a8a 38%,#0f172a 80%,#020617 100%); color:#fff; }
+  .splash.light { background:linear-gradient(180deg,#f8fafc 0%,#dbeafe 40%,#f8fafc 100%); color:#0f172a; }
+  .glow { position:absolute; top:34%; left:50%; width:320px; height:320px; transform:translate(-50%,-50%);
+    background:radial-gradient(circle,rgba(59,130,246,.45) 0%,rgba(59,130,246,0) 65%); animation:pulse 3s ease-in-out infinite; }
+  .logo { position:relative; width:84px; height:84px; border-radius:26px; background:linear-gradient(135deg,#5b8def,#2563eb);
+    box-shadow:0 10px 30px rgba(37,99,235,.55); display:grid; place-items:center; animation:pop .8s cubic-bezier(.2,1.4,.4,1) both; }
+  .logo .box { width:34px; height:34px; border-radius:9px; background:#f1f5f9; display:grid; place-items:center; }
+  .logo svg { width:22px; height:22px; stroke:#2563eb; stroke-width:3.2; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:30; animation:draw 1s .5s ease-out both; }
+  .name { position:relative; margin-top:18px; font-size:26px; font-weight:800; letter-spacing:-.01em; animation:rise .7s .3s both; }
+  .tag { position:relative; margin-top:6px; font-size:12px; font-weight:600; opacity:.65; animation:rise .7s .45s both; }
+  .loader { position:absolute; bottom:78px; left:50%; width:22px; height:22px; margin-left:-11px; border-radius:50%;
+    border:3px solid rgba(96,165,250,.25); border-top-color:#60a5fa; animation:spin .9s linear infinite; }
+  .foot { position:absolute; bottom:34px; width:100%; text-align:center; font-size:10px; letter-spacing:.1em; font-weight:600; opacity:.5; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes pulse { 50% { opacity:.6; transform:translate(-50%,-50%) scale(1.12); } }
+  @keyframes pop { from { transform:scale(.6); opacity:0; } }
+  @keyframes rise { from { transform:translateY(10px); opacity:0; } }
+  @keyframes draw { from { stroke-dashoffset:30; } to { stroke-dashoffset:0; } }
+
+  /* Launcher icons */
+  .icons { display:grid; grid-template-columns:repeat(3,96px); gap:28px 24px; }
+  .icon-wrap { text-align:center; font-size:12px; color:var(--muted); }
+  .icon { width:96px; height:96px; margin:0 auto 8px; overflow:hidden; background:linear-gradient(135deg,#5b8def,#2563eb); display:grid; place-items:center; box-shadow:0 6px 16px rgba(0,0,0,.3); }
+  .icon.circle { border-radius:50%; } .icon.squircle { border-radius:32%; } .icon.rounded { border-radius:22%; }
+  .icon .fg { width:44%; height:44%; border-radius:26%; background:#f1f5f9; display:grid; place-items:center; }
+  .icon svg { width:60%; height:60%; stroke:#2563eb; stroke-width:3.4; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+  .home { margin-top:32px; padding:18px; border-radius:20px; background:linear-gradient(160deg,#334155,#0f172a); display:flex; gap:20px; }
+  .home .icon { width:56px; height:56px; margin:0; box-shadow:none; }
+</style>
+</head>
+<body>
+<h1>Task Tracker: Splash &amp; Launcher Icon</h1>
+<p class="sub">Preview of the design used in <code>androidApp/src/main/res</code>. Android 12+ shows the icon on a solid background colour; the gradient and glow below are the in-app design reference.</p>
+<div class="toolbar">
+  <button id="theme">Toggle light / dark</button>
+  <button class="alt" id="replay">Replay animation</button>
+</div>
+
+<div class="grid">
+  <section>
+    <h2>Splash screen</h2>
+    <div class="phone">
+      <div class="splash" id="splash">
+        <div class="glow"></div>
+        <div class="logo"><div class="box"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>
+        <div class="name">Task Tracker</div>
+        <div class="tag">Sync Tasks &bull; Work Together</div>
+        <div class="loader"></div>
+        <div class="foot">POWERED BY FIREBASE &amp; KMP</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Adaptive launcher icon</h2>
+    <div class="icons">
+      <div class="icon-wrap"><div class="icon circle"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>Circle</div>
+      <div class="icon-wrap"><div class="icon squircle"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>Squircle</div>
+      <div class="icon-wrap"><div class="icon rounded"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>Rounded square</div>
+    </div>
+    <div class="home">
+      <div class="icon circle"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>
+      <div class="icon squircle"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>
+      <div class="icon rounded"><div class="fg"><svg viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 7"/></svg></div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const splash = document.getElementById('splash');
+  document.getElementById('theme').onclick = () => {
+    document.body.classList.toggle('light');
+    splash.classList.toggle('light');
+  };
+  document.getElementById('replay').onclick = () => {
+    const c = splash.cloneNode(true);
+    splash.replaceWith(c);
+    c.id = 'splash';
+    location.reload();
+  };
+</script>
+</body>
+</html>
