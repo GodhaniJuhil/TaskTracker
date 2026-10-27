@@ -5,7 +5,6 @@ const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
-const CHANNEL_ID = "task_updates_high";
 const DEAD_TOKEN_CODES = [
   "messaging/registration-token-not-registered",
   "messaging/invalid-registration-token",
@@ -50,7 +49,7 @@ function invitationEmail(invite) {
  * Records a feed entry for each user and pushes it to their device. Every notification document
  * has a matching FCM push, so the feed and the push notifications never drift apart.
  */
-async function notifyUsers(userIds, { title, body, type, workspaceId, tag }) {
+async function notifyUsers(userIds, { title, body, type, workspaceId, entityId = "", category = "" }) {
   if (userIds.length === 0) return;
   const db = getFirestore();
 
@@ -72,15 +71,13 @@ async function notifyUsers(userIds, { title, body, type, workspaceId, tag }) {
   const withToken = profiles.filter((p) => p.exists && p.get("fcmToken"));
   if (withToken.length === 0) return;
 
+  // Data-only + high priority: the system never renders it, so the app's messaging service always runs
+  // (even when killed) and builds the notification itself, including the action buttons.
+  // `category` selects the buttons: INVITE_REQUEST (Accept/Decline), TASK_ASSIGNED (Mark done/Open task).
   const response = await getMessaging().sendEachForMulticast({
     tokens: withToken.map((p) => p.get("fcmToken")),
-    notification: { title, body },
-    data: { title, body, type, workspaceId },
-    android: {
-      priority: "high",
-      ttl: 60 * 1000,
-      notification: { channelId: CHANNEL_ID, ...(tag ? { tag } : {}) },
-    },
+    data: { title, body, type, workspaceId, entityId, category },
+    android: { priority: "high", ttl: 60 * 1000 },
   });
 
   // Responses are index-aligned with the tokens, so a dead token maps straight back to its profile.
@@ -118,11 +115,28 @@ function describeChange(before, after) {
 exports.notifyWorkspaceOnTaskChange = onDocumentWritten("workspaces/{workspaceId}/tasks/{taskId}", async (event) => {
   const before = event.data.before.exists ? event.data.before.data() : null;
   const after = event.data.after.exists ? event.data.after.data() : null;
+  const { workspaceId, taskId } = event.params;
+  const db = getFirestore();
+
+  // Assignment is its own notification, sent only to the new assignee (never to the person who assigned).
+  if (after && after.assignedTo && after.assignedTo !== (before && before.assignedTo) && after.assignedTo !== after.updatedBy) {
+    const ws = await db.doc(`workspaces/${workspaceId}`).get();
+    if (!ws.exists) return;
+    const assigner = await displayName(after.updatedBy);
+    await notifyUsers([after.assignedTo], {
+      title: "New Task Assigned",
+      body: `You were assigned to task '${after.title}' by ${assigner}`,
+      type: "TASK_ASSIGNED",
+      workspaceId,
+      entityId: taskId,
+      category: "TASK_ASSIGNED",
+    });
+    return;
+  }
+
   const change = describeChange(before, after);
   if (!change) return;
 
-  const { workspaceId, taskId } = event.params;
-  const db = getFirestore();
   const workspace = await db.doc(`workspaces/${workspaceId}`).get();
   if (!workspace.exists) return; // the workspace itself is gone
 
@@ -136,7 +150,9 @@ exports.notifyWorkspaceOnTaskChange = onDocumentWritten("workspaces/{workspaceId
     body: `${actor} ${change.verb} "${change.task.title}" in ${workspace.get("name")}`,
     type: "TASK_UPDATE",
     workspaceId,
-    tag: taskId,
+    entityId: taskId,
+    // A deleted task can't be opened, so it gets no button.
+    category: change.verb === "deleted" ? "" : "TASK_VIEW",
   });
 });
 
@@ -158,11 +174,12 @@ exports.onInvitationWritten = onDocumentWritten("invitations/{inviteId}", async 
     const match = await db.collection("users").where("email", "==", after.receiverEmail).limit(1).get();
     if (!match.empty) {
       await notifyUsers([match.docs[0].id], {
-        title: "Workspace invitation",
-        body: `${after.senderEmail} invited you to join ${after.workspaceName}`,
+        title: "New Workspace Invitation",
+        body: `${after.senderEmail} invited you to join '${after.workspaceName}'`,
         type: "INVITE",
         workspaceId: after.workspaceId,
-        tag: event.params.inviteId,
+        entityId: event.params.inviteId,
+        category: "INVITE_REQUEST",
       });
     } else {
       // Picked up by the "Trigger Email from Firestore" extension (collection `mail`).
@@ -179,7 +196,7 @@ exports.onInvitationWritten = onDocumentWritten("invitations/{inviteId}", async 
       body: `${after.receiverEmail} ${after.status === "ACCEPTED" ? "joined" : "declined"} ${after.workspaceName}`,
       type: "INVITE",
       workspaceId: after.workspaceId,
-      tag: event.params.inviteId,
+      entityId: event.params.inviteId,
     });
   }
 });

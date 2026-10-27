@@ -3,7 +3,7 @@ package com.tasktracker.app.domain.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class NotificationType { INVITE, TASK_UPDATE }
+enum class NotificationType { INVITE, TASK_UPDATE, TASK_ASSIGNED }
 
 /** An entry of the in-app activity feed. Written by Cloud Functions; clients only read, mark read and delete. */
 @Serializable

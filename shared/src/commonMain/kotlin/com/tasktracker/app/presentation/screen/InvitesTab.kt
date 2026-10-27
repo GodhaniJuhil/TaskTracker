@@ -171,7 +171,7 @@ private fun NotificationItem(notification: AppNotification, onClick: () -> Unit)
                 )
                 Text(notification.body, style = MaterialTheme.typography.bodyMedium, color = AppColors.TextMuted)
                 Text(
-                    (if (notification.type == NotificationType.INVITE) "Invitation" else "Task") + " · " + timeAgo(notification.createdAt),
+                    (if (notification.type == NotificationType.INVITE) "Invitation" else if (notification.type == NotificationType.TASK_ASSIGNED) "Assigned" else "Task") + " · " + timeAgo(notification.createdAt),
                     style = MaterialTheme.typography.labelSmall,
                     color = AppColors.TextMuted,
                 )

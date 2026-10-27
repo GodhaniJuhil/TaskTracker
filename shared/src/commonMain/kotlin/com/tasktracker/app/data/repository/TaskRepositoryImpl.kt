@@ -79,6 +79,16 @@ class TaskRepositoryImpl(
         tasks(currentWorkspaceId()).document(taskId).update(*fields.toTypedArray())
     }
 
+    override suspend fun markDone(workspaceId: String, taskId: String): Result<Unit> = firebaseCall {
+        val uid = checkNotNull(auth.currentUser?.uid) { "Not signed in" }
+        tasks(workspaceId).document(taskId).update(
+            "status" to TaskStatus.DONE.name,
+            "isCompleted" to true,
+            "updatedBy" to uid,
+            "updatedAt" to Clock.System.now().toEpochMilliseconds(),
+        )
+    }
+
     override suspend fun deleteTask(taskId: String): Result<Unit> = firebaseCall {
         val ref = tasks(currentWorkspaceId()).document(taskId)
         // A delete carries no author, so stamp the actor first; the notification function reads it from the old document.

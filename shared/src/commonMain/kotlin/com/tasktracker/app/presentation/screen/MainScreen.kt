@@ -68,6 +68,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.tasktracker.app.domain.model.Role
 import com.tasktracker.app.domain.model.TaskPriority
 import com.tasktracker.app.domain.model.Workspace
+import com.tasktracker.app.presentation.navigation.DeepLinkController
 import com.tasktracker.app.presentation.theme.AppButton
 import com.tasktracker.app.presentation.theme.AppColors
 import com.tasktracker.app.presentation.theme.AppIcons
@@ -127,6 +128,13 @@ class MainScreen : Screen {
         // Back from any other tab returns to Tasks first; only from Tasks does it leave the app.
         PlatformBackHandler(enabled = tab != MainTab.Tasks) { tabIndex = MainTab.Tasks.ordinal }
 
+        // "Open task" from a notification: show the Tasks tab and make sure its workspace is the active one.
+        val pendingTask = DeepLinkController.pendingTask
+        LaunchedEffect(pendingTask) {
+            val target = pendingTask ?: return@LaunchedEffect
+            tabIndex = MainTab.Tasks.ordinal
+            if (workspace?.id != target.workspaceId) workspaceViewModel.switchWorkspace(target.workspaceId)
+        }
         // Signed out (here or elsewhere) -> back to the auth flow.
         LaunchedEffect(authState.isSignedIn) {
             if (!authState.isSignedIn) navigator.replaceAll(AuthScreen())
@@ -184,6 +192,8 @@ class MainScreen : Screen {
                         onToggle = taskViewModel::toggleCompleted,
                         onDelete = taskViewModel::deleteTask,
                         onEdit = taskViewModel::editTask,
+                        openTaskId = pendingTask?.takeIf { it.workspaceId == workspace?.id }?.taskId,
+                        onOpenTaskHandled = { DeepLinkController.pendingTask = null },
                     )
                     MainTab.Boards -> BoardsTab(
                         state = taskState,

@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,8 +80,19 @@ fun TasksTab(
     onToggle: (Task) -> Unit,
     onDelete: (String) -> Unit,
     onEdit: (Task, TaskChanges) -> Unit,
+    openTaskId: String? = null,
+    onOpenTaskHandled: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf<Task?>(null) }
+
+    // A notification's "Open task" lands here once the right workspace's tasks have loaded.
+    LaunchedEffect(openTaskId, state.tasks) {
+        val target = openTaskId ?: return@LaunchedEffect
+        state.tasks.firstOrNull { it.id == target }?.let {
+            if (canEdit) editing = it
+            onOpenTaskHandled()
+        }
+    }
     var filterIndex by rememberSaveable { mutableStateOf(TaskFilter.Open.ordinal) }
     val filter = TaskFilter.entries[filterIndex]
     var taskPendingDelete by remember { mutableStateOf<Task?>(null) }

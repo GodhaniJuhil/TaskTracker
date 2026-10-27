@@ -22,13 +22,22 @@ class TaskTrackerMessagingService : FirebaseMessagingService(), KoinComponent {
     }
 
     /**
-     * Handles FCM messages (e.g. sent from the Firebase console). While the
-     * app is in the foreground this renders them; in the background the system shows the notification
-     * payload itself using the manifest's default channel and icon.
+     * The backend sends data-only, high-priority messages, so this runs in every app state (foreground,
+     * background, killed) and builds the notification, including its action buttons. A console-sent
+     * message with a `notification` payload still works while the app is in the foreground.
      */
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title ?: message.data["title"] ?: "Task Tracker"
-        val body = message.notification?.body ?: message.data["body"] ?: return
-        notifications.show((message.messageId ?: body).hashCode(), title, body)
+        val data = message.data
+        val body = data["body"] ?: message.notification?.body ?: return
+        notifications.show(
+            PushMessage(
+                title = data["title"] ?: message.notification?.title ?: "Task Tracker",
+                body = body,
+                type = data["type"].orEmpty(),
+                category = data["category"].orEmpty(),
+                workspaceId = data["workspaceId"].orEmpty(),
+                entityId = data["entityId"].orEmpty().ifEmpty { message.messageId ?: body },
+            ),
+        )
     }
 }

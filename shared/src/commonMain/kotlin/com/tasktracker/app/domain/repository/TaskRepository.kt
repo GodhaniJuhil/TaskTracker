@@ -13,5 +13,8 @@ interface TaskRepository {
     /** Writes only the fields set in [changes], so concurrent edits to other fields survive. */
     suspend fun updateTask(taskId: String, changes: TaskChanges): Result<Unit>
 
+    /** Completes a task in an explicit workspace; used by notification actions, where no workspace is selected. */
+    suspend fun markDone(workspaceId: String, taskId: String): Result<Unit>
+
     suspend fun deleteTask(taskId: String): Result<Unit>
 }

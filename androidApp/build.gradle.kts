@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.android)
     implementation(libs.androidx.core.ktx)
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.kotlinx.coroutines.android)
     implementation(platform(libs.firebase.bom.platform))
     implementation(libs.firebase.messaging.android)
