@@ -43,7 +43,22 @@ jobs:
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
           restore-keys: konan-${{ runner.os }}-
 
+      - name: Detect signing secrets
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          PROFILE: ${{ secrets.PROVISION_PROFILE_BASE64 }}
+        run: |
+          # P12_PASSWORD is optional (an empty password is valid). Without the cert + profile
+          # we fall back to an UNSIGNED build so the workflow still succeeds.
+          if [ -n "$CERT" ] && [ -n "$PROFILE" ]; then
+            echo "SIGNING=true" >> "$GITHUB_ENV"
+          else
+            echo "SIGNING=false" >> "$GITHUB_ENV"
+            echo "::warning::BUILD_CERTIFICATE_BASE64 / PROVISION_PROFILE_BASE64 not set - building an UNSIGNED .ipa (not installable without re-signing)"
+          fi
+
       - name: Install certificate and provisioning profile
+        if: env.SIGNING == 'true'
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
@@ -57,7 +72,7 @@ jobs:
           # Falls back to a random password if KEYCHAIN_PASSWORD isn't set (it only protects this temp keychain).
           KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD:-$(uuidgen)}"
 
-          for name in BUILD_CERTIFICATE_BASE64 P12_PASSWORD PROVISION_PROFILE_BASE64; do
+          for name in BUILD_CERTIFICATE_BASE64 PROVISION_PROFILE_BASE64; do
             if [ -z "${!name}" ]; then
               echo "::error::Secret $name is empty or missing"
               exit 1
@@ -100,6 +115,7 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Build and archive
+        if: env.SIGNING == 'true'
         working-directory: iosApp
         run: |
           set -euo pipefail
@@ -118,7 +134,27 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH"
 
+      - name: Build unsigned .ipa (fallback)
+        if: env.SIGNING != 'true'
+        working-directory: iosApp
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/TaskTracker.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p build-output "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP"/TaskTracker.xcarchive/Products/Applications/*.app "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/build-output/TaskTracker.ipa" Payload)
+
       - name: Export .ipa
+        if: env.SIGNING == 'true'
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
@@ -161,7 +197,7 @@ jobs:
             --prerelease
 
       - name: Upload to TestFlight
-        if: env.EXPORT_METHOD == 'app-store-connect'
+        if: env.SIGNING == 'true' && env.EXPORT_METHOD == 'app-store-connect'
         env:
           ASC_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
@@ -173,7 +209,7 @@ jobs:
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 
       - name: Clean up keychain and profile
-        if: always()
+        if: always() && env.SIGNING == 'true'
         run: |
           security delete-keychain "$KEYCHAIN_PATH" || true
           rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision
