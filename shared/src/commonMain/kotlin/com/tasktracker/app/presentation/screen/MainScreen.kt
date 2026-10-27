@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -123,7 +124,7 @@ class MainScreen : Screen {
         val workspace = workspaceState.current
         val myRole = workspace?.roleOf(uid) ?: Role.GUEST
         val darkTheme = ThemeController.isDark()
-        val imeVisible = WindowInsets.isImeVisible
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
         // Back from any other tab returns to Tasks first; only from Tasks does it leave the app.
         PlatformBackHandler(enabled = tab != MainTab.Tasks) { tabIndex = MainTab.Tasks.ordinal }
